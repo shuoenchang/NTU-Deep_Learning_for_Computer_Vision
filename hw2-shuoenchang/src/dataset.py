@@ -1,8 +1,9 @@
-import torch
-from torch.utils.data import Dataset
-import torchvision.transforms as transforms
 import os
+
+import torch
+import torchvision.transforms as transforms
 from scipy.misc import imread
+from torch.utils.data import Dataset
 
 
 class p1Dataset(Dataset):
@@ -26,13 +27,13 @@ class p1Dataset(Dataset):
         image_name = self.file_list[idx]
         image = imread(os.path.join(self.root_dir, image_name))
         image = self.transform(image)
-        target = image_name.split('_')[0]
+        target = int(image_name.split('_')[0])
         sample = {'image': image, 'target': target}
         return sample
 
 
 if __name__ == '__main__':
-    p1 = p1Dataset('hw2_data/p1_data/train_50')
+    p1 = p1Dataset(root_dir='hw2_data/p1_data/train_50')
     print(p1[0]['image'])
     print(p1[0]['target'])
     print(p1[0]['image'].shape)
