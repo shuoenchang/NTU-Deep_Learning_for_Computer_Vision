@@ -7,16 +7,20 @@ from torch.utils.data import Dataset
 
 
 class p1Dataset(Dataset):
-    def __init__(self, root_dir, transform=None):
+    def __init__(self, root_dir, transform=None, has_gt=True):
         self.root_dir = root_dir
         self.file_list = sorted(files for files in
                                 os.listdir(self.root_dir) if files.endswith('.png'))
+        self.has_gt = has_gt
         if transform:
             self.transform = transforms
         else:
             self.transform = transforms.Compose([
+                transforms.ToPILImage(),
+                transforms.Resize((224, 224)),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))])
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                ])
 
     def __len__(self):
         return len(self.file_list)
@@ -27,8 +31,11 @@ class p1Dataset(Dataset):
         image_name = self.file_list[idx]
         image = imread(os.path.join(self.root_dir, image_name))
         image = self.transform(image)
-        target = int(image_name.split('_')[0])
-        sample = {'image': image, 'target': target}
+        if self.has_gt:
+            target = int(image_name.split('_')[0])
+            sample = {'image': image, 'target': target}
+        else:
+            sample = {'image': image, 'name': image_name}
         return sample
 
 

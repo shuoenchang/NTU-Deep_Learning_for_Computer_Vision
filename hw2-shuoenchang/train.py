@@ -23,6 +23,8 @@ def train(dataset, model, optimzer, criterion, device):
         optimzer.step()
         if (step+1) % 50 == 0:
             print('train: {}'.format(np.mean(total_loss)))
+    with open('weights/log.txt', 'a') as f:
+        f.write('train: {}\n'.format(np.mean(total_loss)))
 
 
 def validation(dataset, model, criterion, device):
@@ -43,8 +45,13 @@ def validation(dataset, model, criterion, device):
             correct += int(sum(predict == target))
             total += len(predict)
             accuracy = correct/total
+
     print('validation: {}, accuracy:{:.3f}'.format(
         np.mean(total_loss), accuracy))
+    with open('weights/log.txt', 'a') as f:
+        f.write('validation: {}, accuracy:{:.3f}\n'.format(
+            np.mean(total_loss), accuracy))
+
     return accuracy
 
 
@@ -54,16 +61,25 @@ if __name__ == '__main__':
     valid_set = DataLoader(dataset=p1Dataset('hw2_data/p1_data/val_50'),
                            batch_size=64, shuffle=True)
     model = VGG16(pretrained=True, n_classes=50)
-    optimzer = optim.SGD(model.parameters(), lr=1e-3)
+    # model.load_state_dict(torch.load(PATH))
+    optimzer = optim.SGD(model.parameters(), lr=1e-4)
     criterion = CrossEntropyLoss()
     device = 'cuda:0'
     max_acc = 0.7
-    for epoch in range(150):
+    for epoch in range(20):
+        if epoch == 5:
+            optimzer = optim.SGD(model.parameters(), lr=1e-5)
+        if epoch == 10:
+            optimzer = optim.SGD(model.parameters(), lr=1e-6)
+
         print('\nepoch: {}'.format(epoch))
+        with open('weights/log.txt', 'a') as f:
+            f.write('\nepoch: {}\n'.format(epoch))
+
         train(train_set, model, optimzer, criterion, device)
         accuracy = validation(valid_set, model, criterion, device)
         if max_acc < accuracy:
-            torch.save(
-                model, 'weights/epoch_{:02d}-{:.3f}.pth'.format(epoch, accuracy))
+            torch.save(model.state_dict(),
+                       'weights/epoch_{:02d}-{:.3f}.pth'.format(epoch, accuracy))
             max_acc = accuracy
             print('Best epoch: {}'.format(epoch))
