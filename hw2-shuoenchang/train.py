@@ -23,7 +23,7 @@ def train(dataset, model, optimzer, criterion, device):
         optimzer.step()
         if (step+1) % 50 == 0:
             print('train: {}'.format(np.mean(total_loss)))
-    with open('weights/log.txt', 'a') as f:
+    with open('weights/q1/log.txt', 'a') as f:
         f.write('train: {}\n'.format(np.mean(total_loss)))
 
 
@@ -48,38 +48,40 @@ def validation(dataset, model, criterion, device):
 
     print('validation: {}, accuracy:{:.3f}'.format(
         np.mean(total_loss), accuracy))
-    with open('weights/log.txt', 'a') as f:
+    with open('weights/q1/log.txt', 'a') as f:
         f.write('validation: {}, accuracy:{:.3f}\n'.format(
             np.mean(total_loss), accuracy))
 
-    return accuracy
+    return accuracy, np.mean(total_loss)
 
 
 if __name__ == '__main__':
+    with open('weights/q1/log.txt', 'w') as f:
+        pass
+
     train_set = DataLoader(dataset=p1Dataset('hw2_data/p1_data/train_50'),
                            batch_size=64, shuffle=True)
     valid_set = DataLoader(dataset=p1Dataset('hw2_data/p1_data/val_50'),
                            batch_size=64, shuffle=True)
     model = VGG16(pretrained=True, n_classes=50)
-    # model.load_state_dict(torch.load(PATH))
-    optimzer = optim.SGD(model.parameters(), lr=1e-4)
+    optimzer = optim.Adam(model.parameters(), lr=1e-5)
     criterion = CrossEntropyLoss()
     device = 'cuda:0'
-    max_acc = 0.7
+    min_loss = 2
     for epoch in range(20):
         if epoch == 5:
-            optimzer = optim.SGD(model.parameters(), lr=1e-5)
+            optimzer = optim.Adam(model.parameters(), lr=5e-6)
         if epoch == 10:
-            optimzer = optim.SGD(model.parameters(), lr=1e-6)
+            optimzer = optim.Adam(model.parameters(), lr=1e-6)
 
         print('\nepoch: {}'.format(epoch))
-        with open('weights/log.txt', 'a') as f:
+        with open('weights/q1/log.txt', 'a') as f:
             f.write('\nepoch: {}\n'.format(epoch))
 
         train(train_set, model, optimzer, criterion, device)
-        accuracy = validation(valid_set, model, criterion, device)
-        if max_acc < accuracy:
+        accuracy, loss = validation(valid_set, model, criterion, device)
+        if accuracy > 0.7 and loss < min_loss:
             torch.save(model.state_dict(),
-                       'weights/epoch_{:02d}-{:.3f}.pth'.format(epoch, accuracy))
-            max_acc = accuracy
+                       'weights/q1/epoch_{:02d}-{:.3f}.pth'.format(epoch, accuracy))
+            min_loss = loss
             print('Best epoch: {}'.format(epoch))
