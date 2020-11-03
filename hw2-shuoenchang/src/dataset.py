@@ -35,7 +35,7 @@ class p1Dataset(Dataset):
         image = self.transform(image)
         if self.has_gt:
             target = int(image_name.split('_')[0])
-            sample = {'image': image, 'target': target}
+            sample = {'image': image, 'target': target, 'name': image_name}
         else:
             sample = {'image': image, 'name': image_name}
         return sample
@@ -73,7 +73,7 @@ class p2Dataset(Dataset):
             target = self.mask_to_target(mask)
             sample = {'image': image, 'target': target}
         else:
-            sample = {'image': image, 'name': image_name}
+            sample = {'image': image, 'name': image_name.split('_')[0]}
         return sample
 
     def mask_to_target(self, mask):
