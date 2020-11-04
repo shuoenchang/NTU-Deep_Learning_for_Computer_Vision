@@ -134,4 +134,4 @@ if __name__ == '__main__':
         ind = np.where(masks==c)
         mask[ind[0], ind[1]] = 1
         img = viz_data(img, mask, color=cmap[c])
-        scipy.misc.imsave('./exp.png', np.uint8(img))
+        scipy.misc.imsave('./output/exp.png', np.uint8(img))

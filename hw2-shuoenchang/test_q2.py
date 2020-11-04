@@ -39,10 +39,10 @@ def main(args):
     device = 'cuda:0'
     if args.best:
         model = EnSegNet8(n_classes=7, pretrained=True).to(device)
-        model.load_state_dict(torch.load('2-2_best_0.700.pth', map_location=device))
+        model.load_state_dict(torch.load('weights/2-2_best_0.700.pth', map_location=device))
     else:
         model = VGGFCN32s(n_classes=7, pretrained=True).to(device)
-        model.load_state_dict(torch.load('2-2_0.689.pth', map_location=device))
+        model.load_state_dict(torch.load('weights/2-2_0.689.pth', map_location=device))
     test(test_set, model, device, output_path=args.save_folder)
 
 

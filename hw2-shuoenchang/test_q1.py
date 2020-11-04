@@ -56,7 +56,7 @@ def main(args):
     device = 'cuda:0'
     model = resnext101(pretrained=True, n_classes=50).to(device)
     model.load_state_dict(torch.load(
-        '2-1_0.878.pth', map_location=device))
+        'weights/2-1_0.878.pth', map_location=device))
     test(test_set, model, device, output_path=args.save_folder+'/test_pred.csv')
 
 

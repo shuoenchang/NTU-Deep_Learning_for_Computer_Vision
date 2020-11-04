@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 class logging():
     def __init__(self, save_folder):
         self.log_path = save_folder+'/log.txt'
-        # with open(self.log_path, 'w') as f:
-        # pass
+        with open(self.log_path, 'w') as f:
+            pass
 
     def write(self, text):
         with open(self.log_path, 'a') as f:
@@ -33,7 +33,6 @@ def draw_masks(mask, filepath=''):
 
 
 def draw_features(features, targets):
-    # ref: https://mortis.tech/2019/11/program_note/664/
     tsne = TSNE(n_components=2, init='pca', verbose=1).fit_transform(features)
     tx = tsne[:, 0]
     ty = tsne[:, 1]
