@@ -4,3 +4,8 @@
 hw3_data/*
 *png
 *jpg
+__pycache__
+outputs/*
+.vscode/
+wandb/
+weights/
