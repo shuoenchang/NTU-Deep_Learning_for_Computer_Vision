@@ -45,11 +45,7 @@ def main(args):
     device = 'cuda'
     model = VAE2(1024).to(device)
     model.load_state_dict(torch.load(
-        '/home/en/SSD/DLCV/hw3-shuoenchang/weights/q1_/lamda_0.0001904-dim_1024-VAE2.pth', map_location=device))
-    
-    import os
-    # args.save_folder = args.save_folder+'/{:03d}/'.format(args.seed)
-    os.makedirs(args.save_folder, exist_ok=True)
+        '/home/en/SSD/DLCV/hw3-shuoenchang/weights/q1.pth', map_location=device))
     
     # test(test_set, model, device, output_path=args.save_folder)
     generate(model, device, output_path=args.save_folder, seed=args.seed)

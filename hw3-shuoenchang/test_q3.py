@@ -57,7 +57,7 @@ def main(args):
 
 if __name__ == '__main__':
     torch.manual_seed(422)
-    parser = argparse.ArgumentParser(description='DLCV hw3-1 Training Script')
+    parser = argparse.ArgumentParser(description='DLCV hw3-3 Testing Script')
     parser.add_argument('--batch_size', default=64, type=int,
                         help='Batch size for training')
     parser.add_argument('--num_workers', default=4, type=int,

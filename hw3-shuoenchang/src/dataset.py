@@ -9,13 +9,18 @@ import pandas as pd
 
 
 class FaceDataset(Dataset):
-    def __init__(self, root_dir, transform=None, mode='train'):
+    def __init__(self, root_dir, transform=None, mode='train', normalize=False):
         assert(mode == 'train' or mode == 'test')
         self.mode = mode
         self.img_dir = root_dir+'/'+self.mode
         self.attr_list = pd.read_csv(root_dir+'/'+mode+'.csv')
         if transform:
             self.transform = transforms
+        elif normalize:
+            self.transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+            ])
         else:
             self.transform = transforms.Compose([
                 transforms.ToTensor(),
