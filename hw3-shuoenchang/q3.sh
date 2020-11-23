@@ -1,15 +1,14 @@
-python test_q3.py --dataset mnistm --model_name mnistm
-python test_q3.py --dataset mnistm --model_name usps-mnistm
-python test_q3.py --dataset mnistm --model_name usps
+bash hw3_p3.sh hw3_data/digits/mnistm/test mnistm outputs/q3/mnistm.csv
+python hw3_eval.py outputs/q3/mnistm.csv hw3_data/digits/mnistm/test.csv
+
 
 echo $'\n'
 
-python test_q3.py --dataset svhn --model_name svhn
-python test_q3.py --dataset svhn --model_name mnistm-svhn
-python test_q3.py --dataset svhn --model_name mnistm
+bash hw3_p3.sh hw3_data/digits/svhn/test svhn outputs/q3/svhn.csv
+python hw3_eval.py outputs/q3/svhn.csv hw3_data/digits/svhn/test.csv 
 
 echo $'\n'
 
-python test_q3.py --dataset usps --model_name usps
-python test_q3.py --dataset usps --model_name svhn-usps
-python test_q3.py --dataset usps --model_name svhn
+bash hw3_p3.sh hw3_data/digits/usps/test usps outputs/q3/usps.csv
+python hw3_eval.py outputs/q3/usps.csv hw3_data/digits/usps/test.csv 
+ 

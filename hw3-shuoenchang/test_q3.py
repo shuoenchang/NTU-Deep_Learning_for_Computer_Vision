@@ -26,7 +26,7 @@ def testing(dataset, model, device, output_path):
             
             for image_name, label in zip(name, predicts):
                 with open(output_path, 'a') as f:
-                    f.write(f'{image_name}, {label}\n')
+                    f.write(f'{image_name},{label}\n')
                    
 
 
