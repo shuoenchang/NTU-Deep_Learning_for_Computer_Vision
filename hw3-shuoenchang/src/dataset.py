@@ -19,7 +19,7 @@ class FaceDataset(Dataset):
         elif normalize:
             self.transform = transforms.Compose([
                 transforms.ToTensor(),
-                transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
             ])
         else:
             self.transform = transforms.Compose([
@@ -55,8 +55,9 @@ class DigitDataset(Dataset):
             self.attr_list = pd.read_csv(root_dir+'/'+subset+'/train.csv')
             self.attr_list = self.attr_list[int(len(self.attr_list)*0.9):]
         else:
-            self.img_dir = root_dir+'/'+subset+'/test'
-            self.attr_list = pd.read_csv(root_dir+'/'+subset+'/test.csv')
+            self.img_dir = root_dir
+            self.attr_list = sorted(files for files in
+                                    os.listdir(self.img_dir) if files.endswith('.png'))
 
         if transform:
             self.transform = transforms
@@ -65,7 +66,7 @@ class DigitDataset(Dataset):
                 transforms.ToPILImage(),
                 transforms.Resize(32),
                 transforms.ToTensor(),
-                transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
             ])
         else:
             self.transform = transforms.Compose([
@@ -78,13 +79,21 @@ class DigitDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        image_name = self.attr_list.iloc[idx]['image_name']
-        image = imread(os.path.join(self.img_dir, image_name), mode='RGB')
-        image = self.transform(image)
-        attr = self.attr_list.iloc[idx].to_dict()
-        domain = 0. if self.domain == 'source' else 1.
-        sample = {'image': image, 'name': image_name,
-                  'label': self.attr_list.iloc[idx]['label'], 'domain': domain}
+            
+        if self.mode == 'test':
+            image_name = self.attr_list[idx]
+            image = imread(os.path.join(self.img_dir, image_name), mode='RGB')
+            image = self.transform(image)
+            domain = 0. if self.domain == 'source' else 1.
+            sample = {'image': image, 'name': image_name, 'domain': domain}
+            
+        else:
+            image_name = self.attr_list.iloc[idx]['image_name']
+            image = imread(os.path.join(self.img_dir, image_name), mode='RGB')
+            image = self.transform(image)
+            domain = 0. if self.domain == 'source' else 1.
+            sample = {'image': image, 'name': image_name,
+                    'label': self.attr_list.iloc[idx]['label'], 'domain': domain}
         return sample
 
 

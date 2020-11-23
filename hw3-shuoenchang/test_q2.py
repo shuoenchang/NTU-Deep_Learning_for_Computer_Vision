@@ -17,16 +17,15 @@ def generate(G, device, output_path, seed):
     latent = torch.randn((32, 100, 1, 1)).to(device)
     fake_image = G(latent)
     torchvision.utils.save_image(
-        fake_image.cpu().data, 'outputs/q2/{}.png'.format(seed), nrow=8, normalize=True, range=(-1, 1))
+        fake_image.cpu().data, output_path, nrow=8, normalize=True, range=(-1, 1))
     
 def main(args):
-    print('seed: {}'.format(args.seed))
     torch.manual_seed(args.seed)
     
     device = 'cuda'
     G = Generator(100).to(device)
     G.load_state_dict(torch.load(
-        '/home/en/SSD/DLCV/hw3-shuoenchang/weights/q2.pth', map_location=device))
+        'weights/q2.pth', map_location=device))
     
     generate(G, device, output_path=args.save_folder, seed=args.seed)
 

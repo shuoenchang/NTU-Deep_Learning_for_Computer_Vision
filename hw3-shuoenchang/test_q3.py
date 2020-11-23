@@ -9,48 +9,43 @@ from torch.utils.data import DataLoader
 
 from models.DANN import DANN
 from src.dataset import DigitDataset
-from src.loss import DANN_loss
 
 
-def testing(dataset, model, device, criterion, lambda_domain):
+def testing(dataset, model, device, output_path):
     model.eval()
-    total_loss = []
-    total_domain = []
-    total_label = []
+    with open(output_path, 'w') as f:
+        f.write('image_name, label\n')
     with torch.no_grad():
         corrects = torch.zeros(1).to(device)
         for data in dataset:
             image = data['image'].to(device)
-            gt_domain = data['domain'].to(device)
-            gt_label = data['label'].to(device)
-            label, domain = model(image, lambda_domain)
+            name = data['name']
+            label, domain = model(image, 0)
 
-            _, preds = torch.max(label, 1)
-            corrects += (preds == gt_label).sum()
-
-            loss_s_domain, loss_s_label = criterion(
-                domain, gt_domain, label, gt_label)
-            loss = loss_s_domain+loss_s_label
-            total_loss.append(loss.item())
-            total_domain.append(loss_s_domain.item())
-            total_label.append(loss_s_label.item())
-    acc = corrects.item() / len(dataset.dataset)
-
-    print('acc {:.3f}'.format(acc))
-    return np.mean(total_label), acc
+            _, predicts = torch.max(label, 1)
+            
+            for image_name, label in zip(name, predicts):
+                with open(output_path, 'a') as f:
+                    f.write(f'{image_name}, {label}\n')
+                   
 
 
 def main(args):
 
-    testset = DataLoader(dataset=DigitDataset('hw3_data/digits', subset=args.dataset, mode='test', domain='source'),
+    testset = DataLoader(dataset=DigitDataset(args.input_path, subset=args.dataset, mode='test', domain='source'),
                            batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-
+    if args.dataset == 'svhn' and args.model_name == '':
+        args.model_name = 'mnistm-svhn'
+    elif args.dataset == 'usps' and args.model_name == '':
+        args.model_name = 'svhn-usps'
+    elif args.dataset == "mnistm" and args.model_name == '':
+        args.model_name = 'usps-mnistm'
+        
     model = DANN().to(args.device)
     model.load_state_dict(torch.load(
         'weights/q3/{}.pth'.format(args.model_name), map_location=args.device))
-    criterion = DANN_loss()
     print(args.dataset, args.model_name)
-    loss, acc = testing(testset, model, args.device, criterion, 0)  # noqa
+    testing(testset, model, args.device, args.output_path)  # noqa
 
 
 if __name__ == '__main__':
@@ -63,6 +58,8 @@ if __name__ == '__main__':
     parser.add_argument('--device', default='cuda', type=str,
                         help='Choose the device for training')
     parser.add_argument('--dataset', type=str)
-    parser.add_argument('--model_name', type=str)
+    parser.add_argument('--input_path', type=str)
+    parser.add_argument('--model_name', type=str, default='')
+    parser.add_argument('--output_path', type=str)
     args = parser.parse_args()
     main(args)
