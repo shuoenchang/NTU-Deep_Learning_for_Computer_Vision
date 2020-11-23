@@ -36,14 +36,13 @@ def testing(dataset, model, device, criterion, lambda_domain):
             total_label.append(loss_s_label.item())
     acc = corrects.item() / len(dataset.dataset)
 
-    print('acc {:.3f}, d {:.3f}, l {:.3f}, loss {:.3f}'.format(
-        acc, np.mean(total_domain), np.mean(total_label), np.mean(total_loss)))
+    print('acc {:.3f}'.format(acc))
     return np.mean(total_label), acc
 
 
 def main(args):
 
-    SourceVal = DataLoader(dataset=DigitDataset('hw3_data/digits', subset=args.dataset, mode='val', domain='source'),
+    testset = DataLoader(dataset=DigitDataset('hw3_data/digits', subset=args.dataset, mode='test', domain='source'),
                            batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     model = DANN().to(args.device)
@@ -51,13 +50,13 @@ def main(args):
         'weights/q3/{}.pth'.format(args.model_name), map_location=args.device))
     criterion = DANN_loss()
     print(args.dataset, args.model_name)
-    loss, acc = testing(SourceVal, model, args.device, criterion, 0)  # noqa
+    loss, acc = testing(testset, model, args.device, criterion, 0)  # noqa
 
 
 if __name__ == '__main__':
     torch.manual_seed(422)
     parser = argparse.ArgumentParser(description='DLCV hw3-3 Testing Script')
-    parser.add_argument('--batch_size', default=64, type=int,
+    parser.add_argument('--batch_size', default=256, type=int,
                         help='Batch size for training')
     parser.add_argument('--num_workers', default=4, type=int,
                         help='Number of workers used in dataloading')

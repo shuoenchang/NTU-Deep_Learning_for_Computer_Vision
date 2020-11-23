@@ -8,4 +8,4 @@ __pycache__
 outputs/*
 .vscode/
 wandb/
-weights/
+weights/ckpt/

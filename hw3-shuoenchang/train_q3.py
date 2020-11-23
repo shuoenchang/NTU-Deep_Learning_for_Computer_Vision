@@ -52,9 +52,8 @@ def train(source, target, model, optimzer, device, criterion, lambda_domain):
         total_loss.append(loss.item())
         loss.backward()
         optimzer.step()
-        if step % 50 == 0:
-            print('step {}: s_d {:.3f}, s_l {:.3f}, t_d {:.3f}, loss {:.3f}'.format(
-                step, loss_s_domain, loss_s_label, loss_t_domain, loss), end='\r')
+        print('step {}: s_d {:.3f}, s_l {:.3f}, t_d {:.3f}, loss {:.3f}'.format(
+            step, loss_s_domain, loss_s_label, loss_t_domain, loss), end='\r')
     print('train:       s_d {:.3f}, s_l {:.3f}, t_d {:.3f}, loss {:.3f}'.format(
         loss_s_domain, loss_s_label, loss_t_domain, np.mean(total_loss)))
     return np.mean(total_loss)
@@ -159,7 +158,7 @@ def main(args):
             print('val_target')
             loss, acc = validation(TargetVal, model, device, criterion, lambda_domain)  # noqa
         wandb.log({"val_loss": loss, 'acc': acc})
-        if loss < min_loss and acc>0.4:
+        if loss < min_loss and acc>0.3:
             torch.save(model.state_dict(),
                        '{}/{}-{}.pth'.format(args.save_folder, args.source, args.target))
             min_loss = loss

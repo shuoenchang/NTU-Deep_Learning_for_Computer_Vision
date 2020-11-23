@@ -41,7 +41,7 @@ class FaceDataset(Dataset):
 
 
 class DigitDataset(Dataset):
-    def __init__(self, root_dir, subset, transform=None, mode='train', domain='source'):
+    def __init__(self, root_dir, subset, transform=None, mode='train', domain='source', normalize=False):
         assert(mode == 'train' or mode == 'test' or mode == 'val')
         assert(domain == 'source' or domain == 'target')
         self.mode = mode
@@ -60,6 +60,13 @@ class DigitDataset(Dataset):
 
         if transform:
             self.transform = transforms
+        elif normalize:
+            self.transform = transforms.Compose([
+                transforms.ToPILImage(),
+                transforms.Resize(32),
+                transforms.ToTensor(),
+                transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+            ])
         else:
             self.transform = transforms.Compose([
                 transforms.ToTensor(),
