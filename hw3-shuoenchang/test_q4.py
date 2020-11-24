@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 import models.MCD as MCD
 from src.dataset import DigitDataset
+from src.utils import draw_features
 
 
 def testing(dataset, F, C, device, output_path):
@@ -30,9 +31,35 @@ def testing(dataset, F, C, device, output_path):
                     f.write(f'{image_name},{label}\n')
 
 
+def feature(sourceset, targetset, F, device):
+    F.eval()
+    features = np.empty((0, 256))
+    targets = np.empty((0,), dtype=np.int8)
+    domains = np.empty((0,), dtype=np.int8)
+    with torch.no_grad():
+        for data in sourceset:
+            image = data['image'].to(device)
+            target = data['label'].to(device)
+            domain = data['domain'].to(device)
+            latent = F(image)
+            features = np.concatenate(
+                (features, latent.cpu().numpy()), axis=0)
+            targets = np.concatenate((targets, target), axis=0)
+            domains = np.concatenate((domains, domain), axis=0)
+        for data in targetset:
+            image = data['image'].to(device)
+            target = data['label'].to(device)
+            domain = data['domain'].to(device)
+            latent = F(image)
+            features = np.concatenate(
+                (features, latent.cpu().numpy()), axis=0)
+            targets = np.concatenate((targets, target), axis=0)
+            domains = np.concatenate((domains, domain), axis=0)
+    print(features.shape, targets.shape, domains.shape)
+    draw_features(features, targets, 10, domains)
+
+
 def main(args):
-    testset = DataLoader(dataset=DigitDataset(args.input_path, subset=args.dataset, mode='test', domain='source', normalize=True),
-                         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     if args.dataset == 'svhn' and args.model_name == '':
         args.model_name = 'mnistm-svhn'
     elif args.dataset == 'usps' and args.model_name == '':
@@ -48,12 +75,21 @@ def main(args):
         'weights/q4/{}_C.pth'.format(args.model_name), map_location=args.device))
 
     print(args.dataset, args.model_name)
-    testing(testset, F, C, args.device, args.output_path)  # noqa
+    if args.feature:
+        sourceset = DataLoader(dataset=DigitDataset(args.input_path, subset=args.source, mode='feature', domain='source', normalize=True),
+                               batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+        targetset = DataLoader(dataset=DigitDataset(args.input_path, subset=args.dataset, mode='feature', domain='target', normalize=True),
+                               batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+        feature(sourceset, targetset, F, args.device)
+    else:
+        testset = DataLoader(dataset=DigitDataset(args.input_path, subset=args.dataset, mode='test', domain='source', normalize=True),
+                             batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+        testing(testset, F, C, args.device, args.output_path)  # noqa
 
 
 if __name__ == '__main__':
     torch.manual_seed(422)
-    parser = argparse.ArgumentParser(description='DLCV hw3-3 Testing Script')
+    parser = argparse.ArgumentParser(description='DLCV hw3-4 Testing Script')
     parser.add_argument('--batch_size', default=256, type=int,
                         help='Batch size for training')
     parser.add_argument('--num_workers', default=4, type=int,
@@ -64,5 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--input_path', type=str)
     parser.add_argument('--model_name', type=str, default='')
     parser.add_argument('--output_path', type=str)
+    parser.add_argument('--feature', action='store_true', default=False)
+    parser.add_argument('--source', type=str, default='')
     args = parser.parse_args()
     main(args)

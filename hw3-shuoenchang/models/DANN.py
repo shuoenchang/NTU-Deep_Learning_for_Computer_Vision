@@ -31,13 +31,16 @@ class DANN(nn.Module):
         )
         self.GRL_layer = GRL.apply
 
-    def forward(self, x, lambda_domain):
+    def forward(self, x, lambda_domain, draw=False):
         x = self.feature_extractor(x)
         feature = torch.flatten(x, 1)
         label = self.label_classifier(feature)
         domain = self.GRL_layer(feature, lambda_domain)
         domain = self.domain_classifier(domain)
-        return label, domain
+        if draw:
+            return feature
+        else:
+            return label, domain
 
 
 class GRL(Function):

@@ -109,19 +109,23 @@ class VAE2(nn.Module):
         self.tanh = nn.Tanh()
         self.latent_dim = latent_dim
 
-    def forward(self, x):
+    def forward(self, x, draw=False):
         x = self.encoder(x)
         x = torch.flatten(x, 1)
         logvar = self.logvar(x)
         mu = self.mu(x)
 
         x = self.sampled(logvar, mu)
+        latent = torch.cat((logvar, mu),1)
         x = self.decoder_input(x)
         x = x.reshape(-1, 128, 4, 4)
         x = self.decoder(x)
         x = self.tanh(x)/2 + 0.5
-        return x, logvar, mu
-
+        if draw:
+            return latent
+        else:
+            return x, logvar, mu
+        
     def sampled(self, logvar, mu):
         std = torch.exp(logvar)**0.5
         e = torch.randn(std.size())

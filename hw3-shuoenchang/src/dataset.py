@@ -42,7 +42,7 @@ class FaceDataset(Dataset):
 
 class DigitDataset(Dataset):
     def __init__(self, root_dir, subset, transform=None, mode='train', domain='source', normalize=False):
-        assert(mode == 'train' or mode == 'test' or mode == 'val')
+        assert(mode == 'train' or mode == 'test' or mode == 'val' or mode == 'feature')
         assert(domain == 'source' or domain == 'target')
         self.mode = mode
         self.domain = domain
@@ -54,6 +54,10 @@ class DigitDataset(Dataset):
             self.img_dir = root_dir+'/'+subset+'/train'
             self.attr_list = pd.read_csv(root_dir+'/'+subset+'/train.csv')
             self.attr_list = self.attr_list[int(len(self.attr_list)*0.9):]
+        elif mode == 'feature':
+            self.img_dir = root_dir+'/'+subset+'/test'
+            self.attr_list = pd.read_csv(root_dir+'/'+subset+'/test.csv')
+            self.attr_list = self.attr_list[int(len(self.attr_list)*0.7):]
         else:
             self.img_dir = root_dir
             self.attr_list = sorted(files for files in

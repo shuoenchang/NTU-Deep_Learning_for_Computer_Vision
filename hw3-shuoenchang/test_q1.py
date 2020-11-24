@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from scipy.misc import imsave
 from src.dataset import FaceDataset
 from models.VAE import VAE, VAE2
+from src.utils import draw_features
 
 
 def test(dataset, model, device, output_path):
@@ -25,20 +26,39 @@ def test(dataset, model, device, output_path):
             output = output.cpu()
             # output = (output*255).type(torch.uint8)
             for i in range(len(output)):
-                imsave(output_path+'/'+name[i], image[i].permute(1, 2, 0).cpu())
-                imsave(output_path+'/{:.3f}_'.format(loss.item())+name[i], output[i])
+                imsave(output_path+'/'+name[i],
+                       image[i].permute(1, 2, 0).cpu())
+                imsave(output_path +
+                       '/{:.3f}_'.format(loss.item())+name[i], output[i])
             print('test loss: {}'.format(loss))
-            
-            if j==9: break
+
+            if j == 9:
+                break
+
+
+def feature(dataset, model, device):
+    model.eval()
+    features = np.empty((0, 2048))
+    targets = np.empty((0,), dtype=np.int8)
+    with torch.no_grad():
+        for j, data in enumerate(dataset):
+            image = data['image'].to(device)
+            target = data['attr']['Heavy_Makeup']
+            output, latent = model(image, True)
+            features = np.concatenate(
+                (features, latent.cpu().numpy()), axis=0)
+            targets = np.concatenate((targets, target), axis=0)
+    print(features.shape, targets.shape)
+    draw_features(features, targets, 2)
 
 
 def generate(model, device, output_path, seed):
-    
     model.eval()
     with torch.no_grad():
         output = model.construct(num_image=32)
         torchvision.utils.save_image(output.cpu().data, output_path, nrow=8)
-    
+
+
 def main(args):
     torch.manual_seed(args.seed)
     device = 'cuda'
@@ -47,9 +67,13 @@ def main(args):
         'weights/q1.pth', map_location=device))
     if args.generate:
         generate(model, device, output_path=args.save_folder, seed=args.seed)
+    elif args.feature:
+        test_set = DataLoader(dataset=FaceDataset(args.image_folder, mode='test'),
+                              batch_size=100, shuffle=True)
+        feature(test_set, model, device)
     else:
         test_set = DataLoader(dataset=FaceDataset(args.image_folder, mode='test'),
-                            batch_size=1, shuffle=True)
+                              batch_size=1, shuffle=True)
         test(test_set, model, device, output_path=args.save_folder)
 
 
@@ -59,5 +83,6 @@ if __name__ == '__main__':
     parser.add_argument('--save_folder', type=str)
     parser.add_argument('--seed', type=int, default=594)
     parser.add_argument('--generate', action='store_true', default=False)
+    parser.add_argument('--feature', action='store_true', default=False)
     args = parser.parse_args()
     main(args)
