@@ -74,7 +74,7 @@ def main(args):
     C.load_state_dict(torch.load(
         'weights/q4/{}_C.pth'.format(args.model_name), map_location=args.device))
 
-    print(args.dataset, args.model_name)
+    # print(args.dataset, args.model_name)
     if args.feature:
         sourceset = DataLoader(dataset=DigitDataset(args.input_path, subset=args.source, mode='feature', domain='source', normalize=True),
                                batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)

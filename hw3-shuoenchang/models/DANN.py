@@ -56,6 +56,7 @@ class GRL(Function):
 
 if __name__ == '__main__':
     model = DANN()
+    print(model)
     x = torch.rand(5, 3, 28, 28)
     label, domain = model(x, lambda_domain=0.3)
     print(label.shape, domain.shape)

@@ -70,7 +70,8 @@ def main(args):
     model = DANN().to(args.device)
     model.load_state_dict(torch.load(
         'weights/q3/{}.pth'.format(args.model_name), map_location=args.device))
-    print(args.dataset, args.model_name)
+    
+    # print(args.dataset, args.model_name)
     if args.feature:
         sourceset = DataLoader(dataset=DigitDataset(args.input_path, subset=args.source, mode='feature', domain='source'),
                              batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)

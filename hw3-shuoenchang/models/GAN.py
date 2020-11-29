@@ -95,8 +95,8 @@ class Discriminator(nn.Module):
 
 
 if __name__ == '__main__':
-    model = Generator(100).cuda()
+    model = Discriminator(0).cuda()
     print(model)
-    x = torch.rand((5, 100, 1, 1)).cuda()
-    y = model(x)
-    print(y.shape)
+    # x = torch.rand((5, 100, 1, 1)).cuda()
+    # y = model(x)
+    # print(y.shape)

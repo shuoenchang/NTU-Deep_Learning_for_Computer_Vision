@@ -26,7 +26,7 @@ class Feature(nn.Module):
 
             nn.Linear(128, feature_dim),
             nn.BatchNorm1d(feature_dim),
-			nn.ReLU(True),
+            nn.ReLU(True),
             nn.Dropout(0.5),
         )
         self.init_weights()
