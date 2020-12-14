@@ -24,13 +24,11 @@ class Distance(object):
     def __init__(self, distance_type):
         self.type = distance_type
 
-    def __call__(self, x, y):
+    def __call__(self, support, query):
         if self.type == 'euclidean':
-            return self.euclidean_dist(x, y)
+            return self.euclidean_dist(support, query)
 
     def euclidean_dist(self, x, y):
-        # x: n_class x D (support)
-        # y: n_query x D (query)
         n_class = x.size(0)
         n_query = y.size(0)
         d = x.size(1)
