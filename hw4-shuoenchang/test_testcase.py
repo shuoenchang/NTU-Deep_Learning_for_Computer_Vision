@@ -1,20 +1,19 @@
-import os
-import sys
 import argparse
+import csv
+import os
+import random
+import sys
 
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
+from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.sampler import Sampler
 
-import csv
-import random
-import numpy as np
-import pandas as pd
-
-from PIL import Image
 filenameToPILImage = lambda x: Image.open(x)
 
 # fix random seeds for reproducibility

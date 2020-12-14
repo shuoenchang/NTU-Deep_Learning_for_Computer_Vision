@@ -3,3 +3,7 @@
 # folder with the same name as the one specified below!
 
 hw4_data/*
+.vscode/
+outputs/
+weights/ckpt/
+__pycache__

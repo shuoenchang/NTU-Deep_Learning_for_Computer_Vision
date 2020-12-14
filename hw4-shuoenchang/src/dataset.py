@@ -40,7 +40,7 @@ class MiniDataset(Dataset):
         path = self.data_df.loc[index, "filename"]
         label = self.data_df.loc[index, "label"]
         image = self.transform(os.path.join(self.data_dir, path))
-        return {'image': image, 'label': label}
+        return image, label
 
     def __len__(self):
         return len(self.data_df)
@@ -59,7 +59,7 @@ class GeneratorSampler(Sampler):
         for label in self.labels:
             idx = np.argwhere(np.array(csv_data['label']) == label)
             self.data_idx.append(idx)
-        self.data_idx = torch.Tensor(self.data_idx).squeeze(2)
+        self.data_idx = torch.LongTensor(self.data_idx).squeeze(2)
 
     def __iter__(self):
         for i in range(self.n_batch):
@@ -72,7 +72,7 @@ class GeneratorSampler(Sampler):
                 query.append(self.data_idx[c][rand_idx[self.n_shot:]])
             support = torch.stack(support).view(-1)
             query = torch.stack(query).view(-1)
-            batch = torch.cat((support, query)).type(torch.int64).numpy()
+            batch = torch.cat((support, query)).numpy()
             yield batch
 
     def __len__(self):
@@ -108,4 +108,5 @@ if __name__ == '__main__':
     )
 
     for i, data in enumerate(train_loader):
-        print(data['image'].shape)
+        image, label = data
+        print(image.shape)
