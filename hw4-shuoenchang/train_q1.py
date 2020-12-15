@@ -1,9 +1,11 @@
 import argparse
+import os
 
 import numpy as np
 import torch
 import torch.optim as optim
 from torch import nn
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
 from models.prototypical import Convnet4
@@ -11,7 +13,7 @@ from src.dataset import GeneratorSampler, MiniDataset
 from src.utils import Distance, calculate_acc, set_seed, worker_init_fn
 
 
-def train(data_loader, model, criterion, optimzer, args):
+def train(data_loader, model, distance, criterion, optimzer, args, optimzer_D=None):
     model.train()
     total_loss = []
     total_acc = []
@@ -25,7 +27,6 @@ def train(data_loader, model, criterion, optimzer, args):
         proto = proto.mean(1)
 
         feature = model(query['image'])
-        distance = Distance(args.distance_type)
         logits = distance(proto, feature)
         loss = criterion(logits, query['label'])
         total_loss.append(loss.item())
@@ -33,8 +34,12 @@ def train(data_loader, model, criterion, optimzer, args):
         total_acc.append(accuarcy)
 
         optimzer.zero_grad()
+        if optimzer_D:
+            optimzer_D.zero_grad()
         loss.backward()
         optimzer.step()
+        if optimzer_D:
+            optimzer_D.step()
         if step % 50 == 0:
             print('step {}: loss {:.3f}, acc {:.3f}'.format(
                 step, np.mean(total_loss), np.mean(total_acc)), end='\r')
@@ -42,26 +47,26 @@ def train(data_loader, model, criterion, optimzer, args):
         np.mean(total_loss), np.mean(total_acc)), end='\n')
 
 
-def val(data_loader, model, criterion, args):
-    model.eval()
-    total_loss = []
-    total_acc = []
-    for _, data in enumerate(data_loader):
-        image, _ = data
-        support = {'image': image[:args.n_way*args.n_shot].to(args.device),
-                   'label': torch.LongTensor([i//args.n_shot for i in range(args.n_way*args.n_shot)])}
-        query = {'image': image[args.n_way*args.n_shot:].to(args.device),
-                 'label': torch.LongTensor([i//args.n_query for i in range(args.n_way*args.n_query)]).to(args.device)}
-        proto = model(support['image']).view(args.n_way, args.n_shot, -1)
-        proto = proto.mean(1)
+def val(data_loader, model, distance, criterion, args):
+    with torch.no_grad():
+        model.eval()
+        total_loss = []
+        total_acc = []
+        for _, data in enumerate(data_loader):
+            image, _ = data
+            support = {'image': image[:args.n_way*args.n_shot].to(args.device),
+                       'label': torch.LongTensor([i//args.n_shot for i in range(args.n_way*args.n_shot)])}
+            query = {'image': image[args.n_way*args.n_shot:].to(args.device),
+                     'label': torch.LongTensor([i//args.n_query for i in range(args.n_way*args.n_query)]).to(args.device)}
+            proto = model(support['image']).view(args.n_way, args.n_shot, -1)
+            proto = proto.mean(1)
 
-        feature = model(query['image'])
-        distance = Distance(args.distance_type)
-        logits = distance(proto, feature)
-        loss = criterion(logits, query['label'])
-        total_loss.append(loss.item())
-        accuracy = calculate_acc(logits, query['label'])
-        total_acc.append(accuracy)
+            feature = model(query['image'])
+            logits = distance(proto, feature)
+            loss = criterion(logits, query['label'])
+            total_loss.append(loss.item())
+            accuracy = calculate_acc(logits, query['label'])
+            total_acc.append(accuracy)
 
     print('Validation: loss {:.3f}, acc {:.3f}\n'.format(
         np.mean(total_loss), np.mean(total_acc)))
@@ -79,16 +84,23 @@ def main(args):
         args.val_csv, 600, args.n_way, args.n_shot, args.n_query),
         num_workers=3, worker_init_fn=worker_init_fn)
 
-    model = Convnet4().to(args.device)
+    model = Convnet4(out_channels=args.dim).to(args.device)
+    distance = Distance(args)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.75)
+    if args.distance_type == 'param':
+        optimzer_D = optim.Adam(
+            distance.param_model.parameters(), lr=args.learning_rate)
+    else:
+        optimzer_D = None
+    lr_scheduler = StepLR(optimizer, step_size=5, gamma=0.75)
     min_accuracy = 0.44
 
     for epoch in range(args.max_epoch):
         print('epoch: ', epoch)
-        train(train_loader, model, criterion, optimizer, args)
-        loss, accuracy = val(val_loader, model, criterion, args)
+        train(train_loader, model, distance,
+              criterion, optimizer, args, optimzer_D)
+        loss, accuracy = val(val_loader, model, distance, criterion, args)
         lr_scheduler.step()
         if accuracy > min_accuracy:
             torch.save(model.state_dict(),
@@ -105,6 +117,8 @@ def parse_args():
                         help='N_shot (default: 1)')
     parser.add_argument('--n_query', default=15, type=int,
                         help='N_query (default: 15)')
+    parser.add_argument('--dim', default=100, type=int,
+                        help='dim for feature size (default: 100)')
     parser.add_argument('--learning_rate', default=1e-4,
                         type=float, help='learning rate for training')
     parser.add_argument('--device', default='cuda', type=str,
@@ -133,4 +147,5 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     set_seed(args.seed)
+    os.makedirs(args.save_folder, exist_ok=True)
     main(args)

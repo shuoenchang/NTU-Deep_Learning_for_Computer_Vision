@@ -6,8 +6,8 @@ import torch
 import torch.optim as optim
 from numpy.core.defchararray import mod
 from torch import nn
-from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
+from torch.utils.data import DataLoader
 
 from models.prototypical import Convnet4, Hallucination
 from src.dataset import GeneratorSampler, MiniDataset
@@ -33,7 +33,7 @@ def train(data_loader, model, hall, criterion, optimzer, args):
         new_proto = new_proto.mean(1)
 
         feature = model(query['image'])
-        distance = Distance(args.distance_type)
+        distance = Distance(args)
         logits = distance(new_proto, feature)
         loss = criterion(logits, query['label'])
         total_loss.append(loss.item())
@@ -53,30 +53,31 @@ def train(data_loader, model, hall, criterion, optimzer, args):
 
 
 def val(data_loader, model, hall, criterion, args):
-    model.eval()
-    total_loss = []
-    total_acc = []
-    for _, data in enumerate(data_loader):
-        image, _ = data
-        support = {'image': image[:args.n_way*args.n_shot].to(args.device),
-                   'label': torch.LongTensor([i//args.n_shot for i in range(args.n_way*args.n_shot)])}
-        query = {'image': image[args.n_way*args.n_shot:].to(args.device),
-                 'label': torch.LongTensor([i//args.n_query for i in range(args.n_way*args.n_query)]).to(args.device)}
-        proto = model(support['image']).view(args.n_way, args.n_shot, args.dim)
-        new_proto = torch.empty(
-            [args.n_way, args.n_shot+args.n_aug, args.dim]).to(args.device)
-        for c in range(args.n_way):
-            fake = hall(proto[c][0])
-            new_proto[c] = torch.cat([proto[c], fake], dim=0)
-        new_proto = new_proto.mean(1)
+    with torch.no_grad():
+        model.eval()
+        total_loss = []
+        total_acc = []
+        for _, data in enumerate(data_loader):
+            image, _ = data
+            support = {'image': image[:args.n_way*args.n_shot].to(args.device),
+                       'label': torch.LongTensor([i//args.n_shot for i in range(args.n_way*args.n_shot)])}
+            query = {'image': image[args.n_way*args.n_shot:].to(args.device),
+                     'label': torch.LongTensor([i//args.n_query for i in range(args.n_way*args.n_query)]).to(args.device)}
+            proto = model(support['image']).view(args.n_way, args.n_shot, -1)
+            new_proto = torch.empty(
+                [args.n_way, args.n_shot+args.n_aug, args.dim]).to(args.device)
+            for c in range(args.n_way):
+                fake = hall(proto[c][0])
+                new_proto[c] = torch.cat([proto[c], fake], dim=0)
+            new_proto = new_proto.mean(1)
 
-        feature = model(query['image'])
-        distance = Distance(args.distance_type)
-        logits = distance(new_proto, feature)
-        loss = criterion(logits, query['label'])
-        total_loss.append(loss.item())
-        accuracy = calculate_acc(logits, query['label'])
-        total_acc.append(accuracy)
+            feature = model(query['image'])
+            distance = Distance(args)
+            logits = distance(new_proto, feature)
+            loss = criterion(logits, query['label'])
+            total_loss.append(loss.item())
+            accuracy = calculate_acc(logits, query['label'])
+            total_acc.append(accuracy)
 
     print('Validation: loss {:.3f}, acc {:.3f}\n'.format(
         np.mean(total_loss), np.mean(total_acc)))
