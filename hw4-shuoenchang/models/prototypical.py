@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.functional as F
-from torch.nn.modules.activation import ReLU
-from torch.nn.modules.batchnorm import BatchNorm1d
 
 
 class Convnet4(nn.Module):
@@ -49,12 +47,36 @@ class Hallucination(nn.Module):
             nn.Linear(f_dim, f_dim),
         )
 
-    def forward(self, x):
+    def forward(self, x, return_noise=False):
         noise = torch.randn(self.M, self.f_dim).to(x.device)
         x = x.expand(noise.shape)
         x = torch.cat([x, noise], dim=1)
         x = self.net(x)
+        if return_noise:
+            return x, noise
         return x
+
+
+class Discriminator(nn.Module):
+    def __init__(self, f_dim, weight_cliping_limit):
+        super().__init__()
+        self.weight_cliping_limit = weight_cliping_limit
+        self.net = nn.Sequential(
+            nn.Linear(f_dim, f_dim//2),
+            nn.ReLU(),
+            nn.Linear(f_dim//2, f_dim//2),
+            nn.ReLU(),
+            nn.Linear(f_dim//2, 1),
+        )
+
+    def forward(self, x):
+        outputs = self.net(x)
+        return outputs
+
+    def weight_cliping(self):
+        for p in self.parameters():
+            p.data.clamp_(-self.weight_cliping_limit,
+                          self.weight_cliping_limit)
 
 
 if __name__ == '__main__':
