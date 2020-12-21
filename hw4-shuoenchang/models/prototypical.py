@@ -63,9 +63,9 @@ class Discriminator(nn.Module):
         self.weight_cliping_limit = weight_cliping_limit
         self.net = nn.Sequential(
             nn.Linear(f_dim, f_dim//2),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(f_dim//2, f_dim//2),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(f_dim//2, 1),
         )
 
@@ -80,6 +80,5 @@ class Discriminator(nn.Module):
 
 
 if __name__ == '__main__':
-    model = Hallucination()
-    x = torch.randn(100)
-    print(model(x).shape)
+    model = Discriminator(f_dim=100, weight_cliping_limit=0.005)
+    print(model)

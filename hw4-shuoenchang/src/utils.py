@@ -1,7 +1,10 @@
+import random
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from sklearn.manifold import TSNE
 from torch import nn
-import random
 
 
 def set_seed(seed):
@@ -24,7 +27,7 @@ def calculate_acc(logits, label):
 class Distance(object):
     def __init__(self, args):
         self.type = args.distance_type
-        self.param_model = self.Parametric(
+        self.param = self.Parametric(
             args.dim, args.n_way).to(args.device)
 
     def __call__(self, support, query):
@@ -33,7 +36,7 @@ class Distance(object):
         elif self.type == 'cosine':
             return self.cosine_dist(support, query)
         elif self.type == 'param':
-            return self.param_model(support, query)
+            return self.param(support, query)
 
     def euclidean_dist(self, x, y):
         n_class = x.size(0)
@@ -63,11 +66,11 @@ class Distance(object):
             super().__init__()
             self.weight_cliping_limit = 0.01
             self.net = nn.Sequential(
-                nn.Linear(f_dim*(1+n_class), f_dim),
-                nn.Tanh(),
+                nn.Linear(f_dim*2, f_dim),
+                nn.ReLU(),
                 nn.Linear(f_dim, f_dim),
-                nn.Tanh(),
-                nn.Linear(f_dim, n_class),
+                nn.ReLU(),
+                nn.Linear(f_dim, 1),
             )
 
         def forward(self, x, y):
@@ -77,11 +80,37 @@ class Distance(object):
             assert d == y.size(1)
 
             x = x.unsqueeze(0).expand(n_query, n_class, d)
-            x = x.view(n_query, -1)
-            inputs = torch.cat((x, y), dim=1)
-            return self.net(inputs)
+            y = y.unsqueeze(1).expand(n_query, n_class, d)
+            inputs = torch.cat((x, y), dim=2)
+            outputs = self.net(inputs).squeeze(2)
+            return outputs
 
         def weight_cliping(self):
             for p in self.parameters():
                 p.data.clamp_(-self.weight_cliping_limit,
                               self.weight_cliping_limit)
+
+
+def draw_features(features, targets, n_classes, save_name):
+    tsne = TSNE(n_components=2, init='pca', verbose=1).fit_transform(features)
+    tx = tsne[:, 0]
+    ty = tsne[:, 1]
+
+    tx = (tx-min(tx))/(max(tx)-min(tx))
+    ty = (ty-min(ty))/(max(ty)-min(ty))
+
+    # initialize a matplotlib plot
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    # color = np.random.rand(n_classes, 3)
+    color = ['r', 'g', 'b', 'k', 'gold', 'm', 'c', 'orange', 'cyan', 'pink']
+    for i in range(n_classes):
+        plt.plot(tx[targets==i], ty[targets==i], 'x', label='real_'+str(i), c=color[i])
+    for i in range(n_classes):
+        plt.plot(tx[targets==i+5], ty[targets==i+5], '^', label='fake_'+str(i), c=color[i])
+        
+    plt.legend(loc='best', ncol=2)
+    plt.savefig("/home/en/SSD/DLCV/hw4-shuoenchang/figures/"+save_name)
+    plt.show()
+    

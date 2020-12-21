@@ -5,5 +5,5 @@
 hw4_data/*
 .vscode/
 outputs/
-weights/*
+weights/ckpt
 __pycache__

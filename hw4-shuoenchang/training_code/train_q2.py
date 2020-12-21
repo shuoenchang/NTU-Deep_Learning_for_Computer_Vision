@@ -4,16 +4,17 @@ import os
 import numpy as np
 import torch
 import torch.optim as optim
+from numpy.core.defchararray import mod
 from torch import nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
-from models.prototypical import Convnet4
+from models.prototypical import Convnet4, Hallucination
 from src.dataset import GeneratorSampler, MiniDataset
 from src.utils import Distance, calculate_acc, set_seed, worker_init_fn
 
 
-def train(data_loader, model, distance, criterion, optimzer, args, optimzer_D=None):
+def train(data_loader, model, hall, criterion, optimzer, args):
     model.train()
     total_loss = []
     total_acc = []
@@ -24,22 +25,26 @@ def train(data_loader, model, distance, criterion, optimzer, args, optimzer_D=No
         query = {'image': image[args.n_way*args.n_shot:].to(args.device),
                  'label': torch.LongTensor([i//args.n_query for i in range(args.n_way*args.n_query)]).to(args.device)}
         proto = model(support['image']).view(args.n_way, args.n_shot, -1)
-        proto = proto.mean(1)
+        new_proto = torch.empty(
+            [args.n_way, args.n_shot+args.n_aug, args.dim]).to(args.device)
+        for c in range(args.n_way):
+            fake = hall(proto[c][0])
+            new_proto[c] = torch.cat([proto[c], fake], dim=0)
+        new_proto = new_proto.mean(1)
 
         feature = model(query['image'])
-        logits = distance(proto, feature)
+        distance = Distance(args)
+        logits = distance(new_proto, feature)
         loss = criterion(logits, query['label'])
         total_loss.append(loss.item())
         accuarcy = calculate_acc(logits, query['label'])
         total_acc.append(accuarcy)
 
-        optimzer.zero_grad()
-        if optimzer_D:
-            optimzer_D.zero_grad()
+        optimzer['m'].zero_grad()
+        optimzer['h'].zero_grad()
         loss.backward()
-        optimzer.step()
-        if optimzer_D:
-            optimzer_D.step()
+        optimzer['m'].step()
+        optimzer['h'].step()
         if step % 50 == 0:
             print('step {}: loss {:.3f}, acc {:.3f}'.format(
                 step, np.mean(total_loss), np.mean(total_acc)), end='\r')
@@ -47,7 +52,7 @@ def train(data_loader, model, distance, criterion, optimzer, args, optimzer_D=No
         np.mean(total_loss), np.mean(total_acc)), end='\n')
 
 
-def val(data_loader, model, distance, criterion, args):
+def val(data_loader, model, hall, criterion, args):
     with torch.no_grad():
         model.eval()
         total_loss = []
@@ -59,10 +64,16 @@ def val(data_loader, model, distance, criterion, args):
             query = {'image': image[args.n_way*args.n_shot:].to(args.device),
                      'label': torch.LongTensor([i//args.n_query for i in range(args.n_way*args.n_query)]).to(args.device)}
             proto = model(support['image']).view(args.n_way, args.n_shot, -1)
-            proto = proto.mean(1)
+            new_proto = torch.empty(
+                [args.n_way, args.n_shot+args.n_aug, args.dim]).to(args.device)
+            for c in range(args.n_way):
+                fake = hall(proto[c][0])
+                new_proto[c] = torch.cat([proto[c], fake], dim=0)
+            new_proto = new_proto.mean(1)
 
             feature = model(query['image'])
-            logits = distance(proto, feature)
+            distance = Distance(args)
+            logits = distance(new_proto, feature)
             loss = criterion(logits, query['label'])
             total_loss.append(loss.item())
             accuracy = calculate_acc(logits, query['label'])
@@ -85,26 +96,25 @@ def main(args):
         num_workers=3, worker_init_fn=worker_init_fn)
 
     model = Convnet4(out_channels=args.dim).to(args.device)
-    distance = Distance(args)
+    hall = Hallucination(args.dim, args.n_aug).to(args.device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-    if args.distance_type == 'param':
-        optimzer_D = optim.Adam(
-            distance.param_model.parameters(), lr=args.learning_rate)
-    else:
-        optimzer_D = None
-    lr_scheduler = StepLR(optimizer, step_size=5, gamma=0.75)
-    min_accuracy = 0.44
+    optimizer = {'m': optim.Adam(model.parameters(), lr=args.learning_rate),
+                 'h': optim.Adam(hall.parameters(), lr=args.learning_rate)}
+    lr_scheduler = {'m': StepLR(optimizer['m'], step_size=5, gamma=0.5),
+                    'h': StepLR(optimizer['h'], step_size=5, gamma=0.5)}
+    min_accuracy = 0.46
 
     for epoch in range(args.max_epoch):
         print('epoch: ', epoch)
-        train(train_loader, model, distance,
-              criterion, optimizer, args, optimzer_D)
-        loss, accuracy = val(val_loader, model, distance, criterion, args)
-        lr_scheduler.step()
+        train(train_loader, model, hall, criterion, optimizer, args)
+        loss, accuracy = val(val_loader, model, hall, criterion, args)
+        lr_scheduler['m'].step()
+        lr_scheduler['h'].step()
         if accuracy > min_accuracy:
             torch.save(model.state_dict(),
-                       '{}/epoch_{:02d}-{:.3f}.pth'.format(args.save_folder, epoch, accuracy))
+                       '{}/epoch_{:02d}-{:.3f}_m.pth'.format(args.save_folder, epoch, accuracy))
+            torch.save(hall.state_dict(),
+                       '{}/epoch_{:02d}-{:.3f}_h.pth'.format(args.save_folder, epoch, accuracy))
             min_accuracy = accuracy
             print('\rBest Epoch: {}\n'.format(epoch))
 
@@ -117,19 +127,21 @@ def parse_args():
                         help='N_shot (default: 1)')
     parser.add_argument('--n_query', default=15, type=int,
                         help='N_query (default: 15)')
+    parser.add_argument('--n_aug', default=10, type=int,
+                        help='M use in Hallucination (default: 10)')
     parser.add_argument('--dim', default=100, type=int,
                         help='dim for feature size (default: 100)')
-    parser.add_argument('--learning_rate', default=1e-4,
+    parser.add_argument('--learning_rate', default=5e-4,
                         type=float, help='learning rate for training')
     parser.add_argument('--device', default='cuda', type=str,
                         help='Choose the device for training')
     parser.add_argument('--batch_size', default=1000, type=int,
                         help='Batch size for training')
-    parser.add_argument('--max_epoch', default=30, type=int,
+    parser.add_argument('--max_epoch', default=50, type=int,
                         help='Epoch for training')
     parser.add_argument('--distance_type', default='euclidean', type=str,
                         help='Distance type for training')
-    parser.add_argument('--save_folder', default='weights/q1',
+    parser.add_argument('--save_folder', default='weights/q2',
                         help='Directory for saving checkpoint models')
     parser.add_argument('--train_csv', default='hw4_data/train.csv', type=str,
                         help="Training images csv file")
