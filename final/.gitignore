@@ -6,3 +6,4 @@ data/*
 .vscode/
 outputs/
 __pycache__
+weights/
