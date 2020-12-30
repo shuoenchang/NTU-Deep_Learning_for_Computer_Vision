@@ -20,5 +20,6 @@ def worker_init_fn(worker_id):
 
 
 def calculate_acc(logits, label):
-    pred = torch.argmax(logits, dim=1)
+    pred = torch.zeros_like(label)
+    pred[logits>0.5] = 1
     return torch.mean((pred == label).type(torch.FloatTensor))

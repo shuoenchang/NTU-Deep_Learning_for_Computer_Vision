@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 import pandas as pd
 import os
 from PIL import Image
-
+import random
 
 class CockRoach_Dataset(Dataset):
     def __init__(self, root, mode='train', frame_per_dir=11, height=224, width=224, transform=None):
@@ -16,12 +16,23 @@ class CockRoach_Dataset(Dataset):
         self.root = root
 
         # default Transform
-        self.transform = transforms.Compose([
-            lambda x: Image.open(x),
-            transforms.ToTensor(),
-            transforms.Resize((height, width)),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-        ])
+        if self.mode == 'train':
+            self.transform = transforms.Compose([
+                lambda x: Image.open(x),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Resize((height, width)),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                transforms.RandomErasing(),
+            ])
+        else:
+            self.transform = transforms.Compose([
+                lambda x: Image.open(x),
+                transforms.ToTensor(),
+                transforms.Resize((height, width)),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+            ])
+            
         self.transform_to_gray = transforms.Compose([
             lambda x: Image.open(x),
             transforms.ToTensor(),
@@ -44,17 +55,18 @@ class CockRoach_Dataset(Dataset):
     def __getitem__(self, idx):
         video, video_binary, phone, session, humanID, access_type = self.read_video(
             self.video_paths[idx])
+        video_binary_ = video_binary
         if access_type == 1:
             label = 1
         elif access_type == -1:
             label = -1
         else:
             label = 0
-            if self.mode == 'train':
-                video_binary = torch.zeros_like(video_binary)
+            video_binary = torch.zeros_like(video_binary)
         return {
             'video': video,
             'binary': video_binary,
+            'binary_': video_binary_,
             'phone': phone,
             'session': session,
             'humanID': humanID,
@@ -68,6 +80,7 @@ class CockRoach_Dataset(Dataset):
     def read_video(self, video_dir):
         video_path = os.path.join(self.root, video_dir)
         img_paths = os.listdir(video_path)
+        random.shuffle(img_paths)
 
         # Dir name : root/XXXX if test mode
         # Dir name : root/{phone}_{session}_{human ID}_{access type} if not test mode
@@ -84,5 +97,7 @@ class CockRoach_Dataset(Dataset):
             gray = self.transform_to_gray(path)
             gray = gray.squeeze(0)
             video_binary[i][gray > 0] = 1
+            if i+1 == self.frame_per_dir:
+                break
         # return ( torch tensor 10 * h * w , phone, session, humanID, access_type )
         return video, video_binary, int(video_label[0]), int(video_label[1]), int(video_label[2]), int(video_label[3])

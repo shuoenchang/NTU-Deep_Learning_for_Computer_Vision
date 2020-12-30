@@ -135,9 +135,10 @@ class CDCNpp(nn.Module):
         self.sa1 = SpatialAttention(kernel=7)
         self.sa2 = SpatialAttention(kernel=5)
         self.sa3 = SpatialAttention(kernel=3)
-        self.downsample32x32 = nn.Upsample(size=(32, 32), mode='bilinear', align_corners=False)
+        self.downsample32x32 = nn.Upsample(
+            size=(32, 32), mode='bilinear', align_corners=False)
 
-    def forward(self, x):	    	# x [3, 256, 256]
+    def forward(self, x, return_feature=False):	    	# x [3, 256, 256]
 
         x_input = x
         x = self.conv1(x)
@@ -164,8 +165,10 @@ class CDCNpp(nn.Module):
         map_x = self.lastconv1(x_concat)
 
         map_x = map_x.squeeze(1)
-
-        return map_x, x_concat, attention1, attention2, attention3, x_input
+        if return_feature:
+            return map_x, x_concat, attention1, attention2, attention3, x_input
+        else:
+            return map_x
 
 
 if __name__ == '__main__':
