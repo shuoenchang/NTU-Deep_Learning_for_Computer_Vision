@@ -6,6 +6,7 @@ class Optimizer:
         pass
 
     def __new__(self, model_parameters, opt, lr):
+
         self.model_parameters = model_parameters
         self.lr = lr
         self.optimizer_name = opt
@@ -17,3 +18,4 @@ class Optimizer:
             return optim.RMSprop(self.model_parameters, self.lr)
         elif self.optimizer_name == 'AdamW':
             return optim.AdamW(self.model_parameters, self.lr)
+

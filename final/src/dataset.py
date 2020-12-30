@@ -7,6 +7,9 @@ import os
 from PIL import Image
 import random
 
+from torchvision.transforms.transforms import ToPILImage
+
+
 class CockRoach_Dataset(Dataset):
     def __init__(self, root, mode='train', frame_per_dir=11, height=224, width=224, transform=None):
         # train, val, or test
@@ -19,10 +22,14 @@ class CockRoach_Dataset(Dataset):
         if self.mode == 'train':
             self.transform = transforms.Compose([
                 lambda x: Image.open(x),
+                transforms.ColorJitter(brightness=0.3),
                 transforms.RandomHorizontalFlip(),
+                transforms.RandomAffine(degrees=30, translate=(0, 0.2),
+                                        scale=(0.8, 1.2), shear=(-3, 3, -3, 3)),
                 transforms.ToTensor(),
                 transforms.Resize((height, width)),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                transforms.Normalize((0.485, 0.456, 0.406),
+                                     (0.229, 0.224, 0.225)),
                 transforms.RandomErasing(),
             ])
         else:
@@ -30,16 +37,17 @@ class CockRoach_Dataset(Dataset):
                 lambda x: Image.open(x),
                 transforms.ToTensor(),
                 transforms.Resize((height, width)),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+                transforms.Normalize((0.485, 0.456, 0.406),
+                                     (0.229, 0.224, 0.225))
             ])
-            
+
         self.transform_to_gray = transforms.Compose([
-            lambda x: Image.open(x),
+            transforms.ToPILImage(),
             transforms.ToTensor(),
             transforms.Grayscale(),
             transforms.Resize((32, 32))
         ])
-        
+
         if transform:
             self.transform = transform
 
@@ -94,7 +102,7 @@ class CockRoach_Dataset(Dataset):
             path = os.path.join(self.root, os.path.join(video_dir, img_path))
             img = self.transform(path)
             video[i] = img
-            gray = self.transform_to_gray(path)
+            gray = self.transform_to_gray(img)
             gray = gray.squeeze(0)
             video_binary[i][gray > 0] = 1
             if i+1 == self.frame_per_dir:

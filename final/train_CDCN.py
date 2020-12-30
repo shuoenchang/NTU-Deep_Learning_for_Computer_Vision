@@ -58,21 +58,20 @@ def train(data_loader, model, criterion, optimizer, args):
             print('\rstep {}: loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(step, np.mean(total_loss), np.mean(total_absolute),
                                                                                   np.mean(total_contrastive), np.mean(total_classify)), end='')
 
-    print('\nTraining: acc {:.3f} loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(np.mean(total_acc), np.mean(total_loss), np.mean(total_absolute),
+    print('\rTraining: acc {:.3f} loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(np.mean(total_acc), np.mean(total_loss), np.mean(total_absolute),
                                                                                       np.mean(total_contrastive), np.mean(total_classify)))
 
 
 def val(data_loader, model, criterion, args):
     model.eval()
-    total_loss = []
-    with open('val.csv', 'w') as f:
+    with open('outputs/val.csv', 'w') as f:
         f.write('labels,preds\n')
     labels = []
     preds = []
     with torch.no_grad():
         for step, data in tqdm(enumerate(data_loader), total=len(data_loader)):
             video, binary_, label = data['video'].to(args.device), data['binary_'].to(
-                args.device), data['label'].to(args.device)
+                args.device), data['label']#.to(args.device)
             bs, t, c, w, h = video.shape
             video = video.view(-1, c, w, h)
             map_x = model(video)  # noqa
@@ -86,22 +85,21 @@ def val(data_loader, model, criterion, args):
                     map_score += score_norm
                 map_score = map_score.item()/t
                 map_score = 1 if map_score > 1 else map_score
-                with open('val.csv', 'a') as f:
+                with open('outputs/val.csv', 'a') as f:
                     f.write('{},{}\n'.format(
                         label[video_i].item(), map_score))
                 labels.append(label[video_i].item())
                 preds.append(map_score)
-                # print(label[video_id])
-                # print(map_score)
-                # print()
     fpr, tpr, thresholds = metrics.roc_curve(labels, preds, pos_label=1)
-    print('Validation', metrics.auc(fpr, tpr))
+    loss = criterion['classify'](torch.Tensor(preds), torch.Tensor(labels))
+    acc = calculate_acc(torch.Tensor(preds), torch.Tensor(labels))
+    print('Validation: AUC {:.7f}, loss {:.3f}, acc {:.3f}'.format(metrics.auc(fpr, tpr), loss, acc))
 
 
 def test(data_loader, model, criterion, args):
     model.eval()
     total_loss = []
-    with open('pred.csv', 'w') as f:
+    with open('outputs/pred.csv', 'w') as f:
         f.write('video_id,label\n')
     with torch.no_grad():
         for step, data in tqdm(enumerate(data_loader), total=len(data_loader)):
@@ -120,7 +118,7 @@ def test(data_loader, model, criterion, args):
                     map_score += score_norm
                 map_score = map_score.item()/t
                 map_score = 1 if map_score > 1 else map_score
-                with open('pred.csv', 'a') as f:
+                with open('outputs/pred.csv', 'a') as f:
                     f.write('{},{}\n'.format(
                         str(video_id[video_i]), map_score))
 
@@ -144,7 +142,7 @@ def main(args):
     model = nn.DataParallel(model)
     if args.val or args.test:
         print('load model')
-        model.load_state_dict(torch.load('weights/epoch_88.pth'))
+        model.load_state_dict(torch.load('weights/epoch_55.pth'))
     criterion = {'absolute': Loss('MSE', args),
                  'contrastive': Loss('CD', args),
                  'classify': Loss('BCELOSS', args)}

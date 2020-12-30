@@ -23,9 +23,6 @@ class Loss:
         elif criterion == 'CD':
             return Contrast_depth_loss()
         elif criterion == 'BCELOSS':
-            weight = args.BCE_weight
-            weight = torch.tensor(weight)
-            # print(weight)
             return nn.BCELoss()
 
 
