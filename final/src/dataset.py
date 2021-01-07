@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
 import pandas as pd
 import os
 from PIL import Image
@@ -17,20 +18,21 @@ class CockRoach_Dataset(Dataset):
 
         # image root dir
         self.root = root
+        self.root_depth = root.replace(mode, 'depth/{}'.format(mode))
 
         # default Transform
         if self.mode == 'train':
             self.transform = transforms.Compose([
                 lambda x: Image.open(x),
-                transforms.ColorJitter(brightness=0.3),
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomAffine(degrees=30, translate=(0, 0.2),
-                                        scale=(0.8, 1.2), shear=(-3, 3, -3, 3)),
+                transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3),
+                # transforms.RandomHorizontalFlip(),
+                # transforms.RandomAffine(degrees=15, translate=(0, 0.2),
+                #                         scale=(0.8, 1.2), shear=(-5, 5, -5, 5)),
                 transforms.ToTensor(),
-                transforms.Resize((height, width)),
+                transforms.RandomErasing(),
+                # transforms.Resize((height, width)),
                 transforms.Normalize((0.485, 0.456, 0.406),
                                      (0.229, 0.224, 0.225)),
-                transforms.RandomErasing(),
             ])
         else:
             self.transform = transforms.Compose([
@@ -45,7 +47,14 @@ class CockRoach_Dataset(Dataset):
             transforms.ToPILImage(),
             transforms.ToTensor(),
             transforms.Grayscale(),
-            transforms.Resize((32, 32))
+            # transforms.Resize((32, 32))
+        ])
+
+        self.depth = transforms.Compose([
+            lambda x: Image.open(x),
+            transforms.ToTensor(),
+            transforms.Grayscale(),
+            # transforms.Resize((32, 32))
         ])
 
         if transform:
@@ -56,13 +65,16 @@ class CockRoach_Dataset(Dataset):
         self.height = height
         self.width = width
         self.video_paths = sorted(os.listdir(self.root))
+        self.depth_paths = sorted(os.listdir(self.root_depth))
         if mode != 'test':
             self.video_paths = sorted(
                 self.video_paths, key=lambda x: int(x.split('_')[-2]))
+            self.depth_paths = sorted(
+                self.depth_paths, key=lambda x: int(x.split('_')[-2]))
 
     def __getitem__(self, idx):
         video, video_binary, phone, session, humanID, access_type = self.read_video(
-            self.video_paths[idx])
+            self.video_paths[idx], self.depth_paths[idx])
         video_binary_ = video_binary
         if access_type == 1:
             label = 1
@@ -85,7 +97,7 @@ class CockRoach_Dataset(Dataset):
     def __len__(self):
         return len(self.video_paths)
 
-    def read_video(self, video_dir):
+    def read_video(self, video_dir, depth_dir):
         video_path = os.path.join(self.root, video_dir)
         img_paths = os.listdir(video_path)
         random.shuffle(img_paths)
@@ -98,14 +110,31 @@ class CockRoach_Dataset(Dataset):
 
         video = torch.zeros((self.frame_per_dir, 3, self.height, self.width))
         video_binary = torch.zeros((self.frame_per_dir, 32, 32))
-        for i, img_path in enumerate(img_paths):
+        for idx, img_path in enumerate(img_paths):
             path = os.path.join(self.root, os.path.join(video_dir, img_path))
             img = self.transform(path)
-            video[i] = img
-            gray = self.transform_to_gray(img)
-            gray = gray.squeeze(0)
-            video_binary[i][gray > 0] = 1
-            if i+1 == self.frame_per_dir:
+            path = os.path.join(self.root, os.path.join(depth_dir, img_path))
+            depth_img = self.depth(path)
+            if self.mode == 'train':
+                # RandomHorizontalFlip
+                if random.random() > 0.5:
+                    img = TF.hflip(img)
+                    depth_img = TF.hflip(depth_img)
+                
+                # RandomResizedCrop
+                i, j, h, w = transforms.RandomResizedCrop.get_params(img, (0.85, 1), (3/4, 4/3))
+                img = TF.resized_crop(img, i, j, h, w, (self.height, self.width))
+                depth_img = TF.resized_crop(depth_img, i, j, h, w, (32, 32))
+                
+                # RandomRotation
+                degree = random.uniform(-15, 15)
+                img = TF.rotate(img, degree)
+                depth_img = TF.rotate(depth_img, degree)
+
+            video[idx] = img
+            video_binary[idx] = depth_img
+                
+            if idx+1 == self.frame_per_dir:
                 break
         # return ( torch tensor 10 * h * w , phone, session, humanID, access_type )
         return video, video_binary, int(video_label[0]), int(video_label[1]), int(video_label[2]), int(video_label[3])

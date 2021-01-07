@@ -2,6 +2,7 @@ import argparse
 import os
 
 import numpy as np
+from numpy.core.fromnumeric import sort
 import torch
 from tqdm import tqdm
 from torch import nn
@@ -22,7 +23,8 @@ def train(data_loader, model, criterion, optimizer, args):
     total_absolute = []
     total_contrastive = []
     total_classify = []
-    total_acc = []
+    total_label = []
+    total_pred = []
     optimizer['m'].zero_grad()
     for step, data in enumerate(data_loader):
         video, binary, label, binary_ = data['video'].to(args.device), data['binary'].to(
@@ -37,15 +39,17 @@ def train(data_loader, model, criterion, optimizer, args):
         contrastive_loss = criterion['contrastive'](map_x, binary)
         total_contrastive.append(contrastive_loss.item())
 
-        score_norm = torch.sum(map_x.view(bs, -1), dim=1) \
-            / torch.sum(binary_.view(bs, -1), dim=1)
+        score_norm = torch.mean(map_x.view(bs, -1), dim=1) \
+            # / torch.sum(binary_.view(bs, -1), dim=1)
         score_norm[score_norm > 1] = 1
         classify_loss = criterion['classify'](
             score_norm, label.type_as(score_norm))
         total_classify.append(classify_loss.item())
-        total_acc.append(calculate_acc(score_norm, label))
+        for i in range(len(data['label'])):
+            total_label.append(data['label'][i].item())
+            total_pred.append(score_norm[i].item())
 
-        loss = absolute_loss+contrastive_loss+classify_loss
+        loss = absolute_loss+contrastive_loss # +classify_loss
         total_loss.append(loss.item())
 
         loss = loss/args.accumulation_steps
@@ -57,8 +61,9 @@ def train(data_loader, model, criterion, optimizer, args):
         if step % 5 == 0:
             print('\rstep {}: loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(step, np.mean(total_loss), np.mean(total_absolute),
                                                                                   np.mean(total_contrastive), np.mean(total_classify)), end='')
-
-    print('\rTraining: acc {:.3f} loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(np.mean(total_acc), np.mean(total_loss), np.mean(total_absolute),
+    fpr, tpr, thresholds = metrics.roc_curve(total_label, total_pred, pos_label=1)
+    
+    print('\rTraining: AUC {:.3f} loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(metrics.auc(fpr, tpr), np.mean(total_loss), np.mean(total_absolute),
                                                                                       np.mean(total_contrastive), np.mean(total_classify)))
 
 
@@ -77,14 +82,25 @@ def val(data_loader, model, criterion, args):
             map_x = model(video)  # noqa
             map_x = map_x.view(bs, t, 32, 32)
             for video_i in range(bs):
-                map_score = 0.0
+                map_score = []
                 for frame_i in range(t):
-                    score_norm = torch.sum(map_x[video_i, frame_i, :, :]) \
-                        / torch.sum(binary_[video_i, frame_i, :, :])
-                    # print(score_norm)
-                    map_score += score_norm
-                map_score = map_score.item()/t
-                map_score = 1 if map_score > 1 else map_score
+                    score_norm = torch.mean(map_x[video_i, frame_i, :, :]) \
+                        # / torch.sum(binary_[video_i, frame_i, :, :])
+                    map_score.append(score_norm.item())
+                map_score = np.array(sorted(map_score))
+                # pos = sum(map_score[2:-2]>0.5)
+                # neg = sum(map_score[2:-2]<=0.5)
+                # if pos>neg:
+                #     map_score = map_score[-1]
+                # elif pos<neg:
+                #     map_score = map_score[0]
+                # else:
+                #     if np.mean(map_score[2:-2])>0.5:
+                #         map_score = map_score[-1]
+                #     else:
+                #         map_score = map_score[0]
+                map_score = np.mean(map_score)
+                map_score = 1 if map_score>1 else map_score
                 with open('outputs/val.csv', 'a') as f:
                     f.write('{},{}\n'.format(
                         label[video_i].item(), map_score))
@@ -93,13 +109,13 @@ def val(data_loader, model, criterion, args):
     fpr, tpr, thresholds = metrics.roc_curve(labels, preds, pos_label=1)
     loss = criterion['classify'](torch.Tensor(preds), torch.Tensor(labels))
     acc = calculate_acc(torch.Tensor(preds), torch.Tensor(labels))
-    print('Validation: AUC {:.7f}, loss {:.3f}, acc {:.3f}'.format(metrics.auc(fpr, tpr), loss, acc))
+    print('\rValidation: AUC {:.7f}, loss {:.3f}, acc {:.3f}'.format(metrics.auc(fpr, tpr), loss, acc))
 
 
 def test(data_loader, model, criterion, args):
     model.eval()
     total_loss = []
-    with open('outputs/pred.csv', 'w') as f:
+    with open(args.output_csv, 'w') as f:
         f.write('video_id,label\n')
     with torch.no_grad():
         for step, data in tqdm(enumerate(data_loader), total=len(data_loader)):
@@ -110,15 +126,26 @@ def test(data_loader, model, criterion, args):
             map_x = model(video)  # noqa
             map_x = map_x.view(bs, t, 32, 32)
             for video_i in range(bs):
-                map_score = 0.0
+                map_score = []
                 for frame_i in range(t):
-                    score_norm = torch.sum(map_x[video_i, frame_i, :, :]) \
-                        / torch.sum(binary_[video_i, frame_i, :, :])
-                    # print(score_norm)
-                    map_score += score_norm
-                map_score = map_score.item()/t
-                map_score = 1 if map_score > 1 else map_score
-                with open('outputs/pred.csv', 'a') as f:
+                    score_norm = torch.mean(map_x[video_i, frame_i, :, :]) \
+                        # / torch.sum(binary_[video_i, frame_i, :, :])
+                    map_score.append(score_norm.item())
+                map_score = np.array(sorted(map_score))
+                # pos = sum(map_score[2:-2]>0.5)
+                # neg = sum(map_score[2:-2]<=0.5)
+                # if pos>neg:
+                #     map_score = map_score[-1]
+                # elif pos<neg:
+                #     map_score = map_score[0]
+                # else:
+                #     if np.mean(map_score[2:-2])>0.5:
+                #         map_score = map_score[-1]
+                #     else:
+                #         map_score = map_score[0]
+                map_score = np.mean(map_score)
+                map_score = 1 if map_score>1 else map_score
+                with open(args.output_csv, 'a') as f:
                     f.write('{},{}\n'.format(
                         str(video_id[video_i]), map_score))
 
@@ -139,10 +166,10 @@ def main(args):
         test_dataset, batch_size=args.batch_size, num_workers=3)
 
     model = CDCNpp().to(args.device)
-    model = nn.DataParallel(model)
     if args.val or args.test:
         print('load model')
-        model.load_state_dict(torch.load('weights/epoch_55.pth'))
+        model.load_state_dict(torch.load('weights/depth_flip_noacc/epoch_286.pth', map_location=args.device))
+    model = nn.DataParallel(model)
     criterion = {'absolute': Loss('MSE', args),
                  'contrastive': Loss('CD', args),
                  'classify': Loss('BCELOSS', args)}
@@ -161,10 +188,8 @@ def main(args):
             train(train_loader, model, criterion, optimizer, args)
             lr_scheduler['m'].step()
             # if loss < min_loss:
-            torch.save(model.state_dict(),
+            torch.save(model.module.state_dict(),
                        '{}/epoch_{:02d}.pth'.format(args.save_folder, epoch))
-        # min_loss = loss
-        # print('\rBest Epoch: {}\n'.format(epoch))
 
 
 def parse_args():
@@ -196,6 +221,8 @@ def parse_args():
     parser.add_argument('--val_frame_per_video', default=10, type=int,
                         help="Val frame per video")
     parser.add_argument('--test_data_dir', default='data/oulu/test', type=str,
+                        help="Test images directory")
+    parser.add_argument('--output_csv', default='outputs/pred_oulu.csv', type=str,
                         help="Test images directory")
     parser.add_argument('--test_frame_per_video', default=10, type=int,
                         help="Test frame per video")
