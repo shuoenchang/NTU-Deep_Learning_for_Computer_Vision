@@ -53,7 +53,7 @@ class SpatialAttention(nn.Module):
 
 class CDCNpp(nn.Module):
 
-    def __init__(self, basic_conv=Conv2d_cd, theta=0.7):
+    def __init__(self, basic_conv=Conv2d_cd, theta=0.7, hidden_size=256):
         super(CDCNpp, self).__init__()
 
         self.conv1 = nn.Sequential(
@@ -138,7 +138,18 @@ class CDCNpp(nn.Module):
         self.downsample32x32 = nn.Upsample(
             size=(32, 32), mode='bilinear', align_corners=False)
 
+        # new module
+        self.gru = nn.GRU(1024, hidden_size, num_layers=2, bidirectional=True, batch_first=True)
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size*2, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, 1)
+        )
+
     def forward(self, x, return_feature=False):	    	# x [3, 256, 256]
+        
+        bs, t, c, w, h = x.shape
+        x = x.view(-1, c, w, h)
 
         x_input = x
         x = self.conv1(x)
@@ -165,10 +176,17 @@ class CDCNpp(nn.Module):
         map_x = self.lastconv1(x_concat)
 
         map_x = map_x.squeeze(1)
+        feature = map_x.view(bs, t, -1)
+        self.gru.flatten_parameters()
+        gru_out, hidden = self.gru(feature)
+        gru_out = torch.mean(gru_out, dim=1)
+        predict = self.classifier(gru_out)
+        predict = predict.squeeze(1)
         if return_feature:
             return map_x, x_concat, attention1, attention2, attention3, x_input
         else:
-            return map_x
+            # return map_x
+            return map_x, predict
 
 
 if __name__ == '__main__':

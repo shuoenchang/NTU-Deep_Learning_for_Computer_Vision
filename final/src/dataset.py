@@ -100,7 +100,12 @@ class CockRoach_Dataset(Dataset):
     def read_video(self, video_dir, depth_dir):
         video_path = os.path.join(self.root, video_dir)
         img_paths = os.listdir(video_path)
-        random.shuffle(img_paths)
+        if self.frame_per_dir > 1:
+            img_paths = sorted(img_paths)
+            start = random.randint(0, len(img_paths)-self.frame_per_dir)
+            img_paths = img_paths[start:start+self.frame_per_dir]
+        else:
+            random.shuffle(img_paths)
 
         # Dir name : root/XXXX if test mode
         # Dir name : root/{phone}_{session}_{human ID}_{access type} if not test mode
@@ -130,9 +135,12 @@ class CockRoach_Dataset(Dataset):
                 degree = random.uniform(-15, 15)
                 img = TF.rotate(img, degree)
                 depth_img = TF.rotate(depth_img, degree)
-
-            video[idx] = img
-            video_binary[idx] = depth_img
+                video[idx] = img
+                video_binary[idx] = depth_img
+                
+            else:
+                video[idx] = TF.resize(img, (self.height, self.width))
+                video_binary[idx] = TF.resize(depth_img, (32,32))
                 
             if idx+1 == self.frame_per_dir:
                 break

@@ -25,14 +25,16 @@ def train(data_loader, model, criterion, optimizer, args):
     total_classify = []
     total_label = []
     total_pred = []
+    total_score = []
     optimizer['m'].zero_grad()
     for step, data in enumerate(data_loader):
         video, binary, label, binary_ = data['video'].to(args.device), data['binary'].to(
             args.device), data['label'].to(args.device), data['binary_'].to(args.device)
         bs, t, c, w, h = video.shape
-        video = video.view(-1, c, w, h)
+        # video = video.view(-1, c, w, h)
         binary = binary.view(-1, 32, 32)
-        map_x = model(video)  # noqa
+        # map_x = model(video) 
+        map_x, predict = model(video) 
 
         absolute_loss = criterion['absolute'](map_x, binary)
         total_absolute.append(absolute_loss.item())
@@ -42,14 +44,19 @@ def train(data_loader, model, criterion, optimizer, args):
         score_norm = torch.mean(map_x.view(bs, -1), dim=1) \
             # / torch.sum(binary_.view(bs, -1), dim=1)
         score_norm[score_norm > 1] = 1
-        classify_loss = criterion['classify'](
-            score_norm, label.type_as(score_norm))
+        # classify_loss = criterion['classify'](
+        #     score_norm, label.type_as(score_norm)
+        # )
+        classify_loss = criterion['logits'](
+            predict, label.type_as(predict)
+        )
         total_classify.append(classify_loss.item())
-        for i in range(len(data['label'])):
+        for i in range(bs):
             total_label.append(data['label'][i].item())
-            total_pred.append(score_norm[i].item())
+            total_score.append(score_norm[i].item())
+            total_pred.append(predict[i].item())
 
-        loss = absolute_loss+contrastive_loss # +classify_loss
+        loss = absolute_loss+contrastive_loss+0.2*classify_loss
         total_loss.append(loss.item())
 
         loss = loss/args.accumulation_steps
@@ -58,12 +65,14 @@ def train(data_loader, model, criterion, optimizer, args):
         if (step+1) % args.accumulation_steps == 0:
             optimizer['m'].step()
             optimizer['m'].zero_grad()
-        if step % 5 == 0:
+        if step % 1 == 0:
             print('\rstep {}: loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(step, np.mean(total_loss), np.mean(total_absolute),
                                                                                   np.mean(total_contrastive), np.mean(total_classify)), end='')
     fpr, tpr, thresholds = metrics.roc_curve(total_label, total_pred, pos_label=1)
-    
-    print('\rTraining: AUC {:.3f} loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(metrics.auc(fpr, tpr), np.mean(total_loss), np.mean(total_absolute),
+    AUC = metrics.auc(fpr, tpr)
+    fpr, tpr, thresholds = metrics.roc_curve(total_label, total_score, pos_label=1)
+    AUC_score = metrics.auc(fpr, tpr)
+    print('\rTraining: AUC {:.3f} AUC_score {:.3f} loss {:.3f}, a {:.3f}, c {:.3f}, class {:.3f}'.format(AUC, AUC_score, np.mean(total_loss), np.mean(total_absolute),
                                                                                       np.mean(total_contrastive), np.mean(total_classify)))
 
 
@@ -78,8 +87,8 @@ def val(data_loader, model, criterion, args):
             video, binary_, label = data['video'].to(args.device), data['binary_'].to(
                 args.device), data['label']#.to(args.device)
             bs, t, c, w, h = video.shape
-            video = video.view(-1, c, w, h)
-            map_x = model(video)  # noqa
+            # video = video.view(-1, c, w, h)
+            map_x, predict = model(video) 
             map_x = map_x.view(bs, t, 32, 32)
             for video_i in range(bs):
                 map_score = []
@@ -88,24 +97,18 @@ def val(data_loader, model, criterion, args):
                         # / torch.sum(binary_[video_i, frame_i, :, :])
                     map_score.append(score_norm.item())
                 map_score = np.array(sorted(map_score))
-                # pos = sum(map_score[2:-2]>0.5)
-                # neg = sum(map_score[2:-2]<=0.5)
-                # if pos>neg:
-                #     map_score = map_score[-1]
-                # elif pos<neg:
-                #     map_score = map_score[0]
-                # else:
-                #     if np.mean(map_score[2:-2])>0.5:
-                #         map_score = map_score[-1]
-                #     else:
-                #         map_score = map_score[0]
-                map_score = np.mean(map_score)
-                map_score = 1 if map_score>1 else map_score
+                map_score = np.mean(map_score[1:-1])
+                score = 1 if map_score>1 else map_score
                 with open('outputs/val.csv', 'a') as f:
                     f.write('{},{}\n'.format(
                         label[video_i].item(), map_score))
+                # score = torch.sigmoid(predict[video_i]).item()
+                # with open('outputs/val.csv', 'a') as f:
+                #     f.write('{},{}\n'.format(
+                #         label[video_i].item(), score))
                 labels.append(label[video_i].item())
-                preds.append(map_score)
+                # preds.append(map_score)
+                preds.append(score)
     fpr, tpr, thresholds = metrics.roc_curve(labels, preds, pos_label=1)
     loss = criterion['classify'](torch.Tensor(preds), torch.Tensor(labels))
     acc = calculate_acc(torch.Tensor(preds), torch.Tensor(labels))
@@ -122,8 +125,8 @@ def test(data_loader, model, criterion, args):
             video, binary_, video_id = data['video'].to(args.device), data['binary_'].to(
                 args.device), data['video_id']
             bs, t, c, w, h = video.shape
-            video = video.view(-1, c, w, h)
-            map_x = model(video)  # noqa
+            # video = video.view(-1, c, w, h)
+            map_x, predict = model(video) 
             map_x = map_x.view(bs, t, 32, 32)
             for video_i in range(bs):
                 map_score = []
@@ -132,22 +135,12 @@ def test(data_loader, model, criterion, args):
                         # / torch.sum(binary_[video_i, frame_i, :, :])
                     map_score.append(score_norm.item())
                 map_score = np.array(sorted(map_score))
-                # pos = sum(map_score[2:-2]>0.5)
-                # neg = sum(map_score[2:-2]<=0.5)
-                # if pos>neg:
-                #     map_score = map_score[-1]
-                # elif pos<neg:
-                #     map_score = map_score[0]
-                # else:
-                #     if np.mean(map_score[2:-2])>0.5:
-                #         map_score = map_score[-1]
-                #     else:
-                #         map_score = map_score[0]
-                map_score = np.mean(map_score)
-                map_score = 1 if map_score>1 else map_score
+                map_score = np.mean(map_score[1:-1])
+                score = 1 if map_score>1 else map_score
+                # score = torch.sigmoid(predict[video_i]).item()
                 with open(args.output_csv, 'a') as f:
                     f.write('{},{}\n'.format(
-                        str(video_id[video_i]), map_score))
+                        str(video_id[video_i]), score))
 
 
 def main(args):
@@ -166,13 +159,16 @@ def main(args):
         test_dataset, batch_size=args.batch_size, num_workers=3)
 
     model = CDCNpp().to(args.device)
+    model.load_state_dict(torch.load(args.model_path, map_location=args.device), strict=False)
     if args.val or args.test:
-        print('load model')
-        model.load_state_dict(torch.load('weights/depth_flip_noacc/epoch_286.pth', map_location=args.device))
+        print('load model:', args.model_path)
+        model.load_state_dict(torch.load(args.model_path, map_location=args.device))
+        # model.load_state_dict(torch.load('weights/save/0.99979.pth', map_location=args.device), strict=False)
     model = nn.DataParallel(model)
     criterion = {'absolute': Loss('MSE', args),
                  'contrastive': Loss('CD', args),
-                 'classify': Loss('BCELOSS', args)}
+                 'classify': Loss('BCELOSS', args),
+                 'logits': Loss('BCE', args)}
     optimizer = {'m': Optimizer(
         model.parameters(), 'Adam', lr=args.learning_rate)}
     lr_scheduler = {'m': StepLR(
@@ -183,13 +179,15 @@ def main(args):
     elif args.test:
         test(test_loader, model, criterion, args)
     else:
-        for epoch in range(args.max_epoch):
+        for epoch in range(795, args.max_epoch):
             print('epoch: ', epoch)
             train(train_loader, model, criterion, optimizer, args)
             lr_scheduler['m'].step()
             # if loss < min_loss:
             torch.save(model.module.state_dict(),
-                       '{}/epoch_{:02d}.pth'.format(args.save_folder, epoch))
+                       '{}/epoch_{}.pth'.format(args.save_folder, epoch))
+            torch.save(model.module.state_dict(),
+                       '{}/final.pth'.format(args.save_folder))
 
 
 def parse_args():
@@ -232,6 +230,9 @@ def parse_args():
                         default=False, help='whether validation')
     parser.add_argument('--test', action='store_true',
                         default=False, help='whether validation')
+    parser.add_argument('--model_path', default='weights/depth_aug/epoch_960.pth', type=str,
+                        help="Test images directory")
+    
     return parser.parse_args()
 
 

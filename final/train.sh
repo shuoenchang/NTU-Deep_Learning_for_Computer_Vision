@@ -1,0 +1,1 @@
+python train_CDCN.py --batch_size 16 --step_size 500 --accumulation_steps 2 --max_epoch 1300 --train_frame_per_video 11
